@@ -718,13 +718,11 @@ clientGrabMouseButton (Client * c)
     screen_info = c->screen_info;
     if (screen_info->params->raise_with_any_button)
     {
-        grabButton (screen_info->display_info->devices, clientGetXDisplay (c),
-                    AnyButton, AnyModifier, c->window);
+        grabButton(clientGetXDisplay (c), AnyButton, AnyModifier, c->window);
     }
     else
     {
-        grabButton (screen_info->display_info->devices, clientGetXDisplay (c),
-                    Button1, AnyModifier, c->window);
+        grabButton(clientGetXDisplay (c), Button1, AnyModifier, c->window);
     }
 }
 
@@ -734,10 +732,11 @@ clientUngrabMouseButton (Client * c)
     g_return_if_fail (c != NULL);
     TRACE ("client \"%s\" (0x%lx)", c->name, c->window);
 
-    ungrabButton (c->screen_info->display_info->devices, clientGetXDisplay (c),
-                  AnyButton, AnyModifier, c->window);
+    myDisplayErrorTrapPush (c->screen_info->display_info);
+    ungrabButton (clientGetXDisplay (c), AnyButton, AnyModifier, c->window);
     /* We've ungrabbed way too much, so regrab the regular buttons/modifiers */
     clientGrabButtons (c);
+    myDisplayErrorTrapPopIgnored (c->screen_info->display_info);
 }
 
 void

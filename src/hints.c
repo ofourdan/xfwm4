@@ -1315,7 +1315,6 @@ getXServerTime (DisplayInfo *display_info)
 {
     ScreenInfo *screen_info;
     XEvent xevent;
-    XfwmEvent *event;
     guint32 timestamp;
 
     g_return_val_if_fail (display_info, CurrentTime);
@@ -1328,9 +1327,7 @@ getXServerTime (DisplayInfo *display_info)
         TRACE ("using X server roundtrip");
         updateXserverTime (display_info);
         XWindowEvent (display_info->dpy, display_info->timestamp_win, PropertyChangeMask, &xevent);
-        event = xfwm_device_translate_event (display_info->devices, &xevent, NULL);
-        timestamp = myDisplayUpdateCurrentTime (display_info, event);
-        xfwm_device_free_event (event);
+        timestamp = myDisplayUpdateCurrentTime (display_info, &xevent);
     }
 
     TRACE ("timestamp=%u", (guint32) timestamp);

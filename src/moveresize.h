@@ -45,9 +45,9 @@ void                     clientMoveWarp                         (Client *,
                                                                  int *,
                                                                  guint32);
 void                     clientMove                             (Client *,
-                                                                 XfwmEventButton *);
+                                                                 XEvent *);
 void                     clientResize                           (Client *,
                                                                  int,
-                                                                 XfwmEventButton *);
+                                                                 XEvent *);
 
 #endif /* INC_MOVERESIZE_H */

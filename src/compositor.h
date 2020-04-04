@@ -59,9 +59,9 @@ Pixmap                   compositorGetWindowPixmapAtSize        (ScreenInfo *,
 void                     compositorHandleEvent                  (DisplayInfo *,
                                                                  XEvent *);
 void                     compositorZoomIn                       (ScreenInfo *,
-                                                                 XfwmEventButton *);
+                                                                 XButtonEvent *);
 void                     compositorZoomOut                      (ScreenInfo *,
-                                                                 XfwmEventButton *);
+                                                                 XButtonEvent *);
 void                     compositorInitDisplay                  (DisplayInfo *);
 void                     compositorSetCompositeMode             (DisplayInfo *,
                                                                  gboolean);

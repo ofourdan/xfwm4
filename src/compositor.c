@@ -4218,7 +4218,7 @@ compositorHandleEvent (DisplayInfo *display_info, XEvent *ev)
 }
 
 void
-compositorZoomIn (ScreenInfo *screen_info, XfwmEventButton *event)
+compositorZoomIn (ScreenInfo *screen_info, XButtonEvent *ev)
 {
 #ifdef HAVE_COMPOSITOR
     screen_info->transform.matrix[0][0] -= 4096;
@@ -4233,8 +4233,8 @@ compositorZoomIn (ScreenInfo *screen_info, XfwmEventButton *event)
     if (!screen_info->zoomed)
     {
         XFixesHideCursor (screen_info->display_info->dpy, screen_info->xroot);
-        screen_info->cursorLocation.x = event->x_root - screen_info->cursorOffsetX;
-        screen_info->cursorLocation.y = event->y_root - screen_info->cursorOffsetY;
+        screen_info->cursorLocation.x = ev->x_root - screen_info->cursorOffsetX;
+        screen_info->cursorLocation.x = ev->y_root - screen_info->cursorOffsetY;
     }
 
     screen_info->zoomed = TRUE;
@@ -4246,12 +4246,12 @@ compositorZoomIn (ScreenInfo *screen_info, XfwmEventButton *event)
         screen_info->zoom_timeout_id = g_timeout_add ((1000 / timeout_rate /* per second */),
                                                       zoom_timeout_cb, screen_info);
     }
-    recenter_zoomed_area (screen_info, event->x_root, event->y_root);
+    recenter_zoomed_area (screen_info, ev->x_root, ev->y_root);
 #endif /* HAVE_COMPOSITOR */
 }
 
 void
-compositorZoomOut (ScreenInfo *screen_info, XfwmEventButton *event)
+compositorZoomOut (ScreenInfo *screen_info, XButtonEvent *ev)
 {
 #ifdef HAVE_COMPOSITOR
     /* don't do anything if the user disabled the zoom feature */
@@ -4270,7 +4270,7 @@ compositorZoomOut (ScreenInfo *screen_info, XfwmEventButton *event)
 
             XFixesShowCursor (screen_info->display_info->dpy, screen_info->xroot);
         }
-        recenter_zoomed_area (screen_info, event->x_root, event->y_root);
+        recenter_zoomed_area (screen_info, ev->x_root, ev->y_root);
     }
 #endif /* HAVE_COMPOSITOR */
 }

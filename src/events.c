@@ -87,7 +87,7 @@ static xfwmWindow menu_event_window;
 /* Forward decl. */
 
 static eventFilterStatus handleEvent (DisplayInfo *display_info,
-                                      XfwmEvent *event);
+                                      XEvent * ev);
 static void menu_callback            (Menu * menu,
                                       MenuOp op,
                                       Window xid,
@@ -151,7 +151,7 @@ typeOfClick_end (gpointer data)
 }
 
 static eventFilterStatus
-typeOfClick_event_filter (XfwmEvent *event, gpointer data)
+typeOfClick_event_filter (XEvent * xevent, gpointer data)
 {
     XfwmButtonClickData *passdata;
     eventFilterStatus status;
@@ -163,7 +163,7 @@ typeOfClick_event_filter (XfwmEvent *event, gpointer data)
     status = EVENT_FILTER_CONTINUE;
 
     /* Update the display time */
-    timestamp = myDisplayUpdateCurrentTime (passdata->display_info, event);
+    timestamp = myDisplayUpdateCurrentTime (passdata->display_info, xevent);
 
     if (timestamp)
     {
@@ -173,9 +173,9 @@ typeOfClick_event_filter (XfwmEvent *event, gpointer data)
             keep_going = FALSE;
         }
     }
-    if (event->meta.type == XFWM_EVENT_BUTTON)
+    if ((xevent->type == ButtonRelease) || (xevent->type == ButtonPress))
     {
-        if (event->button.button == passdata->button)
+        if (xevent->xbutton.button == passdata->button)
         {
             passdata->clicks++;
         }
@@ -187,10 +187,10 @@ typeOfClick_event_filter (XfwmEvent *event, gpointer data)
         }
         status = EVENT_FILTER_STOP;
     }
-    else if (event->meta.type == XFWM_EVENT_MOTION)
+    else if (xevent->type == MotionNotify)
     {
-        passdata->xcurrent = event->motion.x_root;
-        passdata->ycurrent = event->motion.y_root;
+        passdata->xcurrent = xevent->xmotion.x_root;
+        passdata->ycurrent = xevent->xmotion.y_root;
 
         if ((ABS (passdata->x0 - passdata->xcurrent) > passdata->double_click_distance) ||
             (ABS (passdata->y0 - passdata->ycurrent) > passdata->double_click_distance))
@@ -199,9 +199,9 @@ typeOfClick_event_filter (XfwmEvent *event, gpointer data)
         }
         status = EVENT_FILTER_STOP;
     }
-    else if ((event->meta.xevent->type == DestroyNotify) || (event->meta.xevent->type == UnmapNotify))
+    else if ((xevent->type == DestroyNotify) || (xevent->type == UnmapNotify))
     {
-        if (event->meta.window == passdata->w)
+        if (xevent->xany.window == passdata->w)
         {
             /* Discard, mark the click as undefined */
             passdata->clicks = (guint) XFWM_BUTTON_UNDEFINED;
@@ -222,37 +222,33 @@ typeOfClick_event_filter (XfwmEvent *event, gpointer data)
 }
 
 static XfwmButtonClickType
-typeOfClick (ScreenInfo *screen_info, Window w, XfwmEventButton *event, gboolean allow_double_click)
+typeOfClick (ScreenInfo *screen_info, Window w, XEvent * ev, gboolean allow_double_click)
 {
     DisplayInfo *display_info;
     XfwmButtonClickData passdata;
     gboolean g;
 
     g_return_val_if_fail (screen_info != NULL, XFWM_BUTTON_UNDEFINED);
-    g_return_val_if_fail (event != NULL, XFWM_BUTTON_UNDEFINED);
+    g_return_val_if_fail (ev != NULL, XFWM_BUTTON_UNDEFINED);
     g_return_val_if_fail (w != None, XFWM_BUTTON_UNDEFINED);
 
     display_info = screen_info->display_info;
-    g = myScreenGrabPointer (screen_info, FALSE, DOUBLE_CLICK_GRAB, None, event->time);
+    g = myScreenGrabPointer (screen_info, FALSE, DOUBLE_CLICK_GRAB, None, ev->xbutton.time);
 
     if (!g)
     {
         TRACE ("grab failed");
-#if GTK_CHECK_VERSION(3, 22, 0)
-        gdk_display_beep (display_info->gdisplay);
-#else
-        gdk_beep ();
-#endif
-        myScreenUngrabPointer (screen_info, event->time);
+        myDisplayBeep (display_info);
+        myScreenUngrabPointer (screen_info, ev->xbutton.time);
         return XFWM_BUTTON_UNDEFINED;
     }
 
     passdata.display_info = display_info;
-    passdata.button = event->button;
+    passdata.button = ev->xbutton.button;
     passdata.w = w;
-    passdata.x0 = event->x_root;
-    passdata.y0 = event->y_root;
-    passdata.t0 = event->time;
+    passdata.x0 = ev->xbutton.x_root;
+    passdata.y0 = ev->xbutton.y_root;
+    passdata.t0 = ev->xbutton.time;
     passdata.xcurrent = passdata.x0;
     passdata.ycurrent = passdata.y0;
     passdata.tcurrent = passdata.t0;
@@ -289,14 +285,14 @@ toggle_show_desktop (ScreenInfo *screen_info)
 }
 
 static eventFilterStatus
-handleMotionNotify (DisplayInfo *display_info, XfwmEventMotion *event)
+handleMotionNotify (DisplayInfo *display_info, XMotionEvent * ev)
 {
     TRACE ("entering");
     return EVENT_FILTER_REMOVE;
 }
 
 static eventFilterStatus
-handleKeyPress (DisplayInfo *display_info, XfwmEventKey *event)
+handleKeyPress (DisplayInfo *display_info, XKeyEvent * ev)
 {
     eventFilterStatus status;
     ScreenInfo *screen_info;
@@ -306,7 +302,7 @@ handleKeyPress (DisplayInfo *display_info, XfwmEventKey *event)
 
     TRACE ("entering");
 
-    ev_screen_info = myDisplayGetScreenFromRoot (display_info, event->root);
+    ev_screen_info = myDisplayGetScreenFromRoot (display_info, ev->root);
     if (!ev_screen_info)
     {
         return EVENT_FILTER_PASS;
@@ -317,20 +313,20 @@ handleKeyPress (DisplayInfo *display_info, XfwmEventKey *event)
     if (c)
     {
         screen_info = c->screen_info;
-        key = myScreenGetKeyPressed (screen_info, event);
+        key = myScreenGetKeyPressed (screen_info, ev);
         status = EVENT_FILTER_REMOVE;
 
         switch (key)
         {
             case KEY_MOVE:
-                clientMove (c, NULL);
+                clientMove (c, (XEvent *) ev);
                 break;
             case KEY_RESIZE:
-                clientResize (c, CORNER_BOTTOM_RIGHT, NULL);
+                clientResize (c, CORNER_BOTTOM_RIGHT, (XEvent *) ev);
                 break;
             case KEY_CYCLE_WINDOWS:
             case KEY_CYCLE_REVERSE_WINDOWS:
-                clientCycle (c, event);
+                clientCycle (c, ev);
                 break;
             case KEY_CLOSE_WINDOW:
                 clientClose (c);
@@ -383,22 +379,22 @@ handleKeyPress (DisplayInfo *display_info, XfwmEventKey *event)
                 clientToggleFullscreen (c);
                 break;
             case KEY_MOVE_NEXT_WORKSPACE:
-                workspaceSwitch (screen_info, screen_info->current_ws + 1, c, TRUE, event->time);
+                workspaceSwitch (screen_info, screen_info->current_ws + 1, c, TRUE, ev->time);
                 break;
             case KEY_MOVE_PREV_WORKSPACE:
-                workspaceSwitch (screen_info, screen_info->current_ws - 1, c, TRUE, event->time);
+                workspaceSwitch (screen_info, screen_info->current_ws - 1, c, TRUE, ev->time);
                 break;
             case KEY_MOVE_UP_WORKSPACE:
-                workspaceMove (screen_info, -1, 0, c, event->time);
+                workspaceMove (screen_info, -1, 0, c, ev->time);
                 break;
             case KEY_MOVE_DOWN_WORKSPACE:
-                workspaceMove (screen_info, 1, 0, c, event->time);
+                workspaceMove (screen_info, 1, 0, c, ev->time);
                 break;
             case KEY_MOVE_LEFT_WORKSPACE:
-                workspaceMove (screen_info, 0, -1, c, event->time);
+                workspaceMove (screen_info, 0, -1, c, ev->time);
                 break;
             case KEY_MOVE_RIGHT_WORKSPACE:
-                workspaceMove (screen_info, 0, 1, c, event->time);
+                workspaceMove (screen_info, 0, 1, c, ev->time);
                 break;
             case KEY_MOVE_WORKSPACE_1:
             case KEY_MOVE_WORKSPACE_2:
@@ -421,7 +417,7 @@ handleKeyPress (DisplayInfo *display_info, XfwmEventKey *event)
             case KEY_POPUP_MENU:
                 show_window_menu (c, frameExtentX (c) + frameLeft (c),
                                      frameExtentY (c) + frameTop (c),
-                                     Button1, event->time, TRUE);
+                                     Button1, ev->time, TRUE);
                 break;
             case KEY_FILL_WINDOW:
                 clientFill (c, CLIENT_FILL);
@@ -478,14 +474,14 @@ handleKeyPress (DisplayInfo *display_info, XfwmEventKey *event)
     }
     else
     {
-        key = myScreenGetKeyPressed (ev_screen_info, event);
+        key = myScreenGetKeyPressed (ev_screen_info, ev);
         switch (key)
         {
             case KEY_CYCLE_WINDOWS:
                 status = EVENT_FILTER_REMOVE;
                 if (ev_screen_info->clients)
                 {
-                    clientCycle (ev_screen_info->clients->prev, event);
+                    clientCycle (ev_screen_info->clients->prev, ev);
                 }
                 break;
             case KEY_CLOSE_WINDOW:
@@ -510,27 +506,27 @@ handleKeyPress (DisplayInfo *display_info, XfwmEventKey *event)
             break;
         case KEY_NEXT_WORKSPACE:
             status = EVENT_FILTER_REMOVE;
-            workspaceSwitch (ev_screen_info, ev_screen_info->current_ws + 1, NULL, TRUE, event->time);
+            workspaceSwitch (ev_screen_info, ev_screen_info->current_ws + 1, NULL, TRUE, ev->time);
             break;
         case KEY_PREV_WORKSPACE:
             status = EVENT_FILTER_REMOVE;
-            workspaceSwitch (ev_screen_info, ev_screen_info->current_ws - 1, NULL, TRUE, event->time);
+            workspaceSwitch (ev_screen_info, ev_screen_info->current_ws - 1, NULL, TRUE, ev->time);
             break;
         case KEY_UP_WORKSPACE:
             status = EVENT_FILTER_REMOVE;
-            workspaceMove(ev_screen_info, -1, 0, NULL, event->time);
+            workspaceMove(ev_screen_info, -1, 0, NULL, ev->time);
             break;
         case KEY_DOWN_WORKSPACE:
             status = EVENT_FILTER_REMOVE;
-            workspaceMove(ev_screen_info, 1, 0, NULL, event->time);
+            workspaceMove(ev_screen_info, 1, 0, NULL, ev->time);
             break;
         case KEY_LEFT_WORKSPACE:
             status = EVENT_FILTER_REMOVE;
-            workspaceMove(ev_screen_info, 0, -1, NULL, event->time);
+            workspaceMove(ev_screen_info, 0, -1, NULL, ev->time);
             break;
         case KEY_RIGHT_WORKSPACE:
             status = EVENT_FILTER_REMOVE;
-            workspaceMove(ev_screen_info, 0, 1, NULL, event->time);
+            workspaceMove(ev_screen_info, 0, 1, NULL, ev->time);
             break;
         case KEY_ADD_WORKSPACE:
             status = EVENT_FILTER_REMOVE;
@@ -561,7 +557,7 @@ handleKeyPress (DisplayInfo *display_info, XfwmEventKey *event)
             status = EVENT_FILTER_REMOVE;
             if ((guint) (key - KEY_WORKSPACE_1) < ev_screen_info->workspace_count)
             {
-                workspaceSwitch (ev_screen_info, key - KEY_WORKSPACE_1, NULL, TRUE, event->time);
+                workspaceSwitch (ev_screen_info, key - KEY_WORKSPACE_1, NULL, TRUE, ev->time);
             }
             break;
         case KEY_SHOW_DESKTOP:
@@ -579,7 +575,7 @@ handleKeyPress (DisplayInfo *display_info, XfwmEventKey *event)
 }
 
 static eventFilterStatus
-handleKeyRelease (DisplayInfo *display_info, XfwmEventKey *event)
+handleKeyRelease (DisplayInfo *display_info, XKeyEvent * ev)
 {
     Client *c;
 
@@ -597,39 +593,39 @@ handleKeyRelease (DisplayInfo *display_info, XfwmEventKey *event)
  * Button 3 : Resize
  */
 static void
-edgeButton (Client *c, int part, XfwmEventButton *event)
+edgeButton (Client * c, int part, XButtonEvent * ev)
 {
     ScreenInfo *screen_info;
     XfwmButtonClickType tclick;
     guint state;
 
     screen_info = c->screen_info;
-    state = event->state & MODIFIER_MASK;
+    state = ev->state & MODIFIER_MASK;
 
-    if (event->button == Button2)
+    if (ev->button == Button2)
     {
-        tclick = typeOfClick (screen_info, c->window, event, FALSE);
+        tclick = typeOfClick (screen_info, c->window, (XEvent *) ev, FALSE);
         if (tclick == XFWM_BUTTON_CLICK)
         {
             clientLower (c, None);
         }
         else if (tclick == XFWM_BUTTON_DRAG)
         {
-            clientMove (c, event);
+            clientMove (c, (XEvent *) ev);
         }
     }
-    else if ((event->button == Button1) || (event->button == Button3))
+    else if ((ev->button == Button1) || (ev->button == Button3))
     {
-        if ((event->button == Button1) ||
+        if ((ev->button == Button1) ||
             ((screen_info->params->easy_click) && (state == screen_info->params->easy_click)))
         {
             if (!(c->type & WINDOW_TYPE_DONT_FOCUS))
             {
-                clientSetFocus (screen_info, c, event->time, NO_FOCUS_FLAG);
+                clientSetFocus (screen_info, c, ev->time, NO_FOCUS_FLAG);
             }
             clientRaise (c, None);
         }
-        tclick = typeOfClick (screen_info, c->window, event, TRUE);
+        tclick = typeOfClick (screen_info, c->window, (XEvent *) ev, TRUE);
         if (tclick == XFWM_BUTTON_DOUBLE_CLICK)
         {
             switch (part)
@@ -649,13 +645,13 @@ edgeButton (Client *c, int part, XfwmEventButton *event)
         }
         else if (tclick == XFWM_BUTTON_DRAG)
         {
-            clientResize (c, part, event);
+            clientResize (c, part, (XEvent *) ev);
         }
     }
 }
 
 static int
-edgeGetPart (Client *c, XfwmEventButton *event)
+edgeGetPart (Client *c, XButtonEvent * ev)
 {
     int part, x_corner_pixels, y_corner_pixels, x_distance, y_distance;
 
@@ -664,8 +660,8 @@ edgeGetPart (Client *c, XfwmEventButton *event)
     y_corner_pixels = MAX(c->height / 3, 50);
 
     /* Distance from event to edge of client window */
-    x_distance = c->width / 2 - abs(c->width / 2 - event->x);
-    y_distance = c->height / 2 - abs(c->height / 2 - event->y);
+    x_distance = c->width / 2 - abs(c->width / 2 - ev->x);
+    y_distance = c->height / 2 - abs(c->height / 2 - ev->y);
 
     /* Set a sensible default value */
     part = CORNER_BOTTOM_RIGHT;
@@ -673,9 +669,9 @@ edgeGetPart (Client *c, XfwmEventButton *event)
     if (x_distance < x_corner_pixels && y_distance < y_corner_pixels)
     {
         /* In a corner */
-        if (event->x < c->width / 2)
+        if (ev->x < c->width / 2)
         {
-            if (event->y < c->height / 2)
+            if (ev->y < c->height / 2)
             {
                 part = CORNER_TOP_LEFT;
             }
@@ -686,7 +682,7 @@ edgeGetPart (Client *c, XfwmEventButton *event)
         }
         else
         {
-            if (event->y < c->height / 2)
+            if (ev->y < c->height / 2)
             {
                 part = CORNER_TOP_RIGHT;
             }
@@ -702,7 +698,7 @@ edgeGetPart (Client *c, XfwmEventButton *event)
         if (x_distance / x_corner_pixels < y_distance / y_corner_pixels)
         {
             /* Left or right side */
-            if (event->x < c->width / 2)
+            if (ev->x < c->width / 2)
             {
                 part = CORNER_COUNT + SIDE_LEFT;
             }
@@ -714,7 +710,7 @@ edgeGetPart (Client *c, XfwmEventButton *event)
         else
         {
             /* Top or bottom side */
-            if (event->y < c->height / 2)
+            if (ev->y < c->height / 2)
             {
                 part = CORNER_COUNT + SIDE_TOP;
             }
@@ -728,26 +724,26 @@ edgeGetPart (Client *c, XfwmEventButton *event)
     return part;
 }
 static void
-button1Action (Client *c, XfwmEventButton *event)
+button1Action (Client * c, XButtonEvent * ev)
 {
     ScreenInfo *screen_info;
     XfwmButtonClickType tclick;
 
     g_return_if_fail (c != NULL);
-    g_return_if_fail (event != NULL);
+    g_return_if_fail (ev != NULL);
 
     screen_info = c->screen_info;
 
     if (!(c->type & WINDOW_TYPE_DONT_FOCUS))
     {
-        clientSetFocus (screen_info, c, event->time, NO_FOCUS_FLAG);
+        clientSetFocus (screen_info, c, ev->time, NO_FOCUS_FLAG);
     }
     clientRaise (c, None);
 
-    tclick = typeOfClick (screen_info, c->window, event, TRUE);
+    tclick = typeOfClick (screen_info, c->window, (XEvent *) ev, TRUE);
     if ((tclick == XFWM_BUTTON_DRAG) || (tclick == XFWM_BUTTON_CLICK_AND_DRAG))
     {
-        clientMove (c, event);
+        clientMove (c, (XEvent *) ev);
     }
     else if (tclick == XFWM_BUTTON_DOUBLE_CLICK)
     {
@@ -775,44 +771,44 @@ button1Action (Client *c, XfwmEventButton *event)
 }
 
 static void
-titleButton (Client *c, guint state, XfwmEventButton *event)
+titleButton (Client * c, guint state, XButtonEvent * ev)
 {
     ScreenInfo *screen_info;
 
     g_return_if_fail (c != NULL);
-    g_return_if_fail (event != NULL);
+    g_return_if_fail (ev != NULL);
 
     /* Get Screen data from the client itself */
     screen_info = c->screen_info;
 
-    if (event->button == Button1)
+    if (ev->button == Button1)
     {
-        button1Action (c, event);
+        button1Action (c, ev);
     }
-    else if (event->button == Button2)
+    else if (ev->button == Button2)
     {
         clientLower (c, None);
     }
-    else if (event->button == Button3)
+    else if (ev->button == Button3)
     {
         XfwmButtonClickType tclick;
 
-        tclick = typeOfClick (screen_info, c->window, event, FALSE);
+        tclick = typeOfClick (screen_info, c->window, (XEvent *) ev, FALSE);
         if (tclick == XFWM_BUTTON_DRAG)
         {
-            clientMove (c, event);
+            clientMove (c, (XEvent *) ev);
         }
         else if (tclick != XFWM_BUTTON_UNDEFINED)
         {
             if (!(c->type & WINDOW_TYPE_DONT_FOCUS))
             {
-                clientSetFocus (screen_info, c, event->time, NO_FOCUS_FLAG);
+                clientSetFocus (screen_info, c, ev->time, NO_FOCUS_FLAG);
             }
             if (screen_info->params->raise_on_click)
             {
                 clientRaise (c, None);
             }
-            xfwm_device_button_update_window (event, event->root);
+            ev->window = ev->root;
             if (screen_info->button_handler_id)
             {
                 g_signal_handler_disconnect (G_OBJECT (myScreenGetGtkWidget (screen_info)), screen_info->button_handler_id);
@@ -822,7 +818,7 @@ titleButton (Client *c, guint state, XfwmEventButton *event)
             /* Let GTK handle this for us. */
         }
     }
-    else if (event->button == Button4)
+    else if (ev->button == Button4)
     {
         /* Mouse wheel scroll up */
 #ifdef HAVE_COMPOSITOR
@@ -840,7 +836,7 @@ titleButton (Client *c, guint state, XfwmEventButton *event)
             }
         }
     }
-    else if (event->button == Button5)
+    else if (ev->button == Button5)
     {
         /* Mouse wheel scroll down */
 #ifdef HAVE_COMPOSITOR
@@ -861,12 +857,12 @@ titleButton (Client *c, guint state, XfwmEventButton *event)
 #ifdef HAVE_COMPOSITOR
     else if (screen_info->params->horiz_scroll_opacity)
     {
-        if (event->button == Button6)
+        if (ev->button == Button6)
         {
             /* Mouse wheel scroll left, or left side button */
             clientDecOpacity(c);
         }
-        else if (event->button == Button7)
+        else if (ev->button == Button7)
         {
             /* Mouse wheel scroll right, or right side button */
             clientIncOpacity(c);
@@ -876,38 +872,38 @@ titleButton (Client *c, guint state, XfwmEventButton *event)
 }
 
 static void
-rootScrollButton (DisplayInfo *display_info, XfwmEventButton *event)
+rootScrollButton (DisplayInfo *display_info, XButtonEvent * ev)
 {
     static guint32 lastscroll = CurrentTime;
     ScreenInfo *screen_info;
 
-    if ((event->time - lastscroll) < 25)  /* ms */
+    if ((ev->time - lastscroll) < 25)  /* ms */
     {
         /* Too many events in too little time, drop this event... */
         return;
     }
-    lastscroll = event->time;
+    lastscroll = ev->time;
 
     /* Get the screen structure from the root of the event */
-    screen_info = myDisplayGetScreenFromRoot (display_info, event->root);
+    screen_info = myDisplayGetScreenFromRoot (display_info, ev->root);
     if (!screen_info)
     {
         return;
     }
 
-    if (event->button == Button4)
+    if (ev->button == Button4)
     {
-        workspaceSwitch (screen_info, screen_info->current_ws - 1, NULL, TRUE, event->time);
+        workspaceSwitch (screen_info, screen_info->current_ws - 1, NULL, TRUE, ev->time);
     }
-    else if (event->button == Button5)
+    else if (ev->button == Button5)
     {
-        workspaceSwitch (screen_info, screen_info->current_ws + 1, NULL, TRUE, event->time);
+        workspaceSwitch (screen_info, screen_info->current_ws + 1, NULL, TRUE, ev->time);
     }
 }
 
 
 static eventFilterStatus
-handleButtonPress (DisplayInfo *display_info, XfwmEventButton *event)
+handleButtonPress (DisplayInfo *display_info, XButtonEvent * ev)
 {
     ScreenInfo *screen_info;
     Client *c;
@@ -918,75 +914,74 @@ handleButtonPress (DisplayInfo *display_info, XfwmEventButton *event)
     TRACE ("entering");
 
     replay = FALSE;
-    c = myDisplayGetClientFromWindow (display_info, event->meta.window,
-                                      SEARCH_FRAME | SEARCH_WINDOW);
+    c = myDisplayGetClientFromWindow (display_info, ev->window, SEARCH_FRAME | SEARCH_WINDOW);
     if (c)
     {
-        state = event->state & MODIFIER_MASK;
-        win = event->subwindow;
+        state = ev->state & MODIFIER_MASK;
+        win = ev->subwindow;
         screen_info = c->screen_info;
 
-        if ((event->button == Button1) && (state) && (state == screen_info->params->easy_click))
+        if ((ev->button == Button1) && (state) && (state == screen_info->params->easy_click))
         {
-            button1Action (c, event);
+            button1Action (c, ev);
         }
-        else if ((event->button == Button2) && (state) && (state == screen_info->params->easy_click))
+        else if ((ev->button == Button2) && (state) && (state == screen_info->params->easy_click))
         {
             clientLower (c, None);
         }
-        else if ((event->button == Button3) && (state) && (state == screen_info->params->easy_click))
+        else if ((ev->button == Button3) && (state) && (state == screen_info->params->easy_click))
         {
-            part = edgeGetPart (c, event);
-            edgeButton (c, part, event);
+            part = edgeGetPart (c, ev);
+            edgeButton (c, part, ev);
         }
 #ifdef HAVE_COMPOSITOR
-        else if ((event->button == Button4) && (screen_info->params->zoom_desktop) && (state) &&
+        else if ((ev->button == Button4) && (screen_info->params->zoom_desktop) && (state) &&
                  (state == screen_info->params->easy_click) && compositorIsActive (screen_info))
         {
-            compositorZoomIn(screen_info, event);
+            compositorZoomIn(screen_info, ev);
         }
-        else if ((event->button == Button5) && (screen_info->params->zoom_desktop) && (state) &&
+        else if ((ev->button == Button5) && (screen_info->params->zoom_desktop) && (state) &&
                  (state == screen_info->params->easy_click) && compositorIsActive (screen_info))
         {
-            compositorZoomOut(screen_info, event);
+            compositorZoomOut(screen_info, ev);
         }
 #endif /* HAVE_COMPOSITOR */
-        else if ((event->button == Button8) && (state) && (state == screen_info->params->easy_click))
+        else if ((ev->button == Button8) && (state) && (state == screen_info->params->easy_click))
         {
-            workspaceSwitch (screen_info, screen_info->current_ws - 1, NULL, TRUE, event->time);
+            workspaceSwitch (screen_info, screen_info->current_ws - 1, NULL, TRUE, ev->time);
         }
-        else if ((event->button == Button9) && (state) && (state == screen_info->params->easy_click))
+        else if ((ev->button == Button9) && (state) && (state == screen_info->params->easy_click))
         {
-            workspaceSwitch (screen_info, screen_info->current_ws + 1, NULL, TRUE, event->time);
+            workspaceSwitch (screen_info, screen_info->current_ws + 1, NULL, TRUE, ev->time);
         }
 
         else if (WIN_IS_BUTTON (win))
         {
-            if (event->button <= Button3)
+            if (ev->button <= Button3)
             {
                 if (!(c->type & WINDOW_TYPE_DONT_FOCUS))
                 {
-                    clientSetFocus (screen_info, c, event->time, NO_FOCUS_FLAG);
+                    clientSetFocus (screen_info, c, ev->time, NO_FOCUS_FLAG);
                 }
                 if (screen_info->params->raise_on_click)
                 {
                     clientClearDelayedRaise ();
                     clientRaise (c, None);
                 }
-                clientButtonPress (c, win, event);
+                clientButtonPress (c, win, ev);
             }
         }
         else if (win == MYWINDOW_XWINDOW (c->title))
         {
-            titleButton (c, state, event);
+            titleButton (c, state, ev);
         }
         else if (win == MYWINDOW_XWINDOW (c->buttons[MENU_BUTTON]))
         {
-            if (event->button == Button1)
+            if (ev->button == Button1)
             {
                 XfwmButtonClickType tclick;
 
-                tclick = typeOfClick (screen_info, c->window, event, TRUE);
+                tclick = typeOfClick (screen_info, c->window, (XEvent *) ev, TRUE);
 
                 if (tclick == XFWM_BUTTON_DOUBLE_CLICK)
                 {
@@ -996,14 +991,14 @@ handleButtonPress (DisplayInfo *display_info, XfwmEventButton *event)
                 {
                     if (!(c->type & WINDOW_TYPE_DONT_FOCUS))
                     {
-                        clientSetFocus (screen_info, c, event->time, NO_FOCUS_FLAG);
+                        clientSetFocus (screen_info, c, ev->time, NO_FOCUS_FLAG);
                     }
                     if (screen_info->params->raise_on_click)
                     {
                         clientClearDelayedRaise ();
                         clientRaise (c, None);
                     }
-                    xfwm_device_button_update_window (event, event->root);
+                    ev->window = ev->root;
                     if (screen_info->button_handler_id)
                     {
                         g_signal_handler_disconnect (G_OBJECT (myScreenGetGtkWidget (screen_info)), screen_info->button_handler_id);
@@ -1017,52 +1012,51 @@ handleButtonPress (DisplayInfo *display_info, XfwmEventButton *event)
         else if ((win == MYWINDOW_XWINDOW (c->corners[CORNER_TOP_LEFT]))
             && (state == 0))
         {
-            edgeButton (c, CORNER_TOP_LEFT, event);
+            edgeButton (c, CORNER_TOP_LEFT, ev);
         }
         else if ((win == MYWINDOW_XWINDOW (c->corners[CORNER_TOP_RIGHT]))
             && (state == 0))
         {
-            edgeButton (c, CORNER_TOP_RIGHT, event);
+            edgeButton (c, CORNER_TOP_RIGHT, ev);
         }
         else if ((win == MYWINDOW_XWINDOW (c->corners[CORNER_BOTTOM_LEFT]))
             && (state == 0))
         {
-            edgeButton (c, CORNER_BOTTOM_LEFT, event);
+            edgeButton (c, CORNER_BOTTOM_LEFT, ev);
         }
         else if ((win == MYWINDOW_XWINDOW (c->corners[CORNER_BOTTOM_RIGHT]))
             && (state == 0))
         {
-            edgeButton (c, CORNER_BOTTOM_RIGHT, event);
+            edgeButton (c, CORNER_BOTTOM_RIGHT, ev);
         }
         else if ((win == MYWINDOW_XWINDOW (c->sides[SIDE_BOTTOM]))
             && (state == 0))
         {
-            edgeButton (c, CORNER_COUNT + SIDE_BOTTOM, event);
+            edgeButton (c, CORNER_COUNT + SIDE_BOTTOM, ev);
         }
         else if ((win == MYWINDOW_XWINDOW (c->sides[SIDE_TOP]))
             && (state == 0))
         {
-            edgeButton (c, CORNER_COUNT + SIDE_TOP, event);
+            edgeButton (c, CORNER_COUNT + SIDE_TOP, ev);
         }
         else if ((win == MYWINDOW_XWINDOW (c->sides[SIDE_LEFT]))
             && (state == 0))
         {
-            edgeButton (c, CORNER_COUNT + SIDE_LEFT, event);
+            edgeButton (c, CORNER_COUNT + SIDE_LEFT, ev);
         }
         else if ((win == MYWINDOW_XWINDOW (c->sides[SIDE_RIGHT]))
             && (state == 0))
         {
-            edgeButton (c, CORNER_COUNT + SIDE_RIGHT, event);
+            edgeButton (c, CORNER_COUNT + SIDE_RIGHT, ev);
         }
-        else if (event->meta.window == c->window)
+        else if (ev->window == c->window)
         {
             replay = TRUE;
-            if (((screen_info->params->raise_with_any_button) && (c->type & WINDOW_REGULAR_FOCUSABLE))
-                    || (event->button == Button1))
+            if (((screen_info->params->raise_with_any_button) && (c->type & WINDOW_REGULAR_FOCUSABLE)) || (ev->button == Button1))
             {
                 if (!(c->type & WINDOW_TYPE_DONT_FOCUS))
                 {
-                    clientSetFocus (screen_info, c, event->time, NO_FOCUS_FLAG);
+                    clientSetFocus (screen_info, c, ev->time, NO_FOCUS_FLAG);
                 }
                 if ((screen_info->params->raise_on_click) ||
                     !FLAG_TEST (c->xfwm_flags, XFWM_FLAG_HAS_BORDER))
@@ -1079,20 +1073,19 @@ handleButtonPress (DisplayInfo *display_info, XfwmEventButton *event)
            The event did not occur in one of our known good clients...
            Get the screen structure from the root of the event.
          */
-        screen_info = myDisplayGetScreenFromRoot (display_info, event->root);
+        screen_info = myDisplayGetScreenFromRoot (display_info, ev->root);
         if (screen_info)
         {
-            if ((event->meta.window == screen_info->xroot) && (screen_info->params->scroll_workspaces)
-                    && ((event->button == Button4) || (event->button == Button5)))
+            if ((ev->window == screen_info->xroot) && (screen_info->params->scroll_workspaces)
+                    && ((ev->button == Button4) || (ev->button == Button5)))
             {
-                rootScrollButton (display_info, event);
+                rootScrollButton (display_info, ev);
             }
             else
             {
                 myDisplayErrorTrapPush (display_info);
-                xfwm_device_ungrab (display_info->devices, &display_info->devices->pointer,
-                                    display_info->dpy, event->time);
-                XSendEvent (display_info->dpy, screen_info->xfwm4_win, FALSE, SubstructureNotifyMask, event->meta.xevent);
+                XUngrabPointer (display_info->dpy, ev->time);
+                XSendEvent (display_info->dpy, screen_info->xfwm4_win, FALSE, SubstructureNotifyMask, (XEvent *) ev);
                 myDisplayErrorTrapPopIgnored (display_info);
             }
         }
@@ -1105,19 +1098,18 @@ handleButtonPress (DisplayInfo *display_info, XfwmEventButton *event)
 }
 
 static eventFilterStatus
-handleButtonRelease (DisplayInfo *display_info, XfwmEventButton *event)
+handleButtonRelease (DisplayInfo *display_info, XButtonEvent * ev)
 {
     ScreenInfo *screen_info;
 
     TRACE ("entering");
 
     /* Get the screen structure from the root of the event */
-    screen_info = myDisplayGetScreenFromRoot (display_info, event->root);
+    screen_info = myDisplayGetScreenFromRoot (display_info, ev->root);
     myDisplayErrorTrapPush (display_info);
     if (screen_info)
     {
-        XSendEvent (display_info->dpy, screen_info->xfwm4_win, FALSE, SubstructureNotifyMask,
-                    (XEvent *) event->meta.xevent);
+         XSendEvent (display_info->dpy, screen_info->xfwm4_win, FALSE, SubstructureNotifyMask, (XEvent *) ev);
     }
 
     /* Release pending events */
@@ -1390,7 +1382,7 @@ handleConfigureRequest (DisplayInfo *display_info, XConfigureRequestEvent * ev)
 }
 
 static eventFilterStatus
-handleEnterNotify (DisplayInfo *display_info, XfwmEventCrossing *event)
+handleEnterNotify (DisplayInfo *display_info, XCrossingEvent * ev)
 {
     ScreenInfo *screen_info;
     Client *c;
@@ -1401,18 +1393,17 @@ handleEnterNotify (DisplayInfo *display_info, XfwmEventCrossing *event)
 
     TRACE ("entering");
 
-    if ((event->mode == NotifyGrab) || (event->mode == NotifyUngrab)
-        || (event->detail > NotifyNonlinearVirtual))
+    if ((ev->mode == NotifyGrab) || (ev->mode == NotifyUngrab)
+        || (ev->detail > NotifyNonlinearVirtual))
     {
         /* We're not interested in such notifications */
         return EVENT_FILTER_PASS;
     }
 
-    TRACE ("window (0x%lx)", event->meta.window);
+    TRACE ("window (0x%lx)", ev->window);
 
     need_redraw = FALSE;
-    c = myDisplayGetClientFromWindow (display_info, event->meta.window,
-                                      SEARCH_FRAME | SEARCH_BUTTON);
+    c = myDisplayGetClientFromWindow (display_info, ev->window, SEARCH_FRAME | SEARCH_BUTTON);
     if (c)
     {
         screen_info = c->screen_info;
@@ -1425,11 +1416,11 @@ handleEnterNotify (DisplayInfo *display_info, XfwmEventCrossing *event)
                 if(screen_info->params->focus_delay)
                 {
                     clientClearDelayedFocus ();
-                    clientAddDelayedFocus (c, event->time);
+                    clientAddDelayedFocus (c, ev->time);
                 }
                 else
                 {
-                    clientSetFocus (c->screen_info, c, event->time, NO_FOCUS_FLAG);
+                    clientSetFocus (c->screen_info, c, ev->time, NO_FOCUS_FLAG);
                 }
             }
             else
@@ -1441,7 +1432,7 @@ handleEnterNotify (DisplayInfo *display_info, XfwmEventCrossing *event)
         {
             for (b = 0; b < BUTTON_COUNT; b++)
             {
-                if (MYWINDOW_XWINDOW(c->buttons[b]) == event->meta.window)
+                if (MYWINDOW_XWINDOW(c->buttons[b]) == ev->window)
                 {
                     if (!xfwmPixmapNone(clientGetButtonPixmap(c, b, PRELIGHT)))
                     {
@@ -1469,7 +1460,7 @@ handleEnterNotify (DisplayInfo *display_info, XfwmEventCrossing *event)
     }
 
     /* Get the screen structure from the root of the event */
-    screen_info = myDisplayGetScreenFromRoot (display_info, event->root);
+    screen_info = myDisplayGetScreenFromRoot (display_info, ev->root);
 
     if (!screen_info)
     {
@@ -1478,14 +1469,14 @@ handleEnterNotify (DisplayInfo *display_info, XfwmEventCrossing *event)
 
     if (screen_info->params->wrap_workspaces && screen_info->workspace_count > 1)
     {
-        clientMoveWarp (NULL, screen_info, &event->x_root, &event->y_root, event->time);
+        clientMoveWarp (NULL, screen_info, &ev->x_root, &ev->y_root, ev->time);
     }
 
     return EVENT_FILTER_REMOVE;
 }
 
 static eventFilterStatus
-handleLeaveNotify (DisplayInfo *display_info, XfwmEventCrossing *event)
+handleLeaveNotify (DisplayInfo *display_info, XCrossingEvent * ev)
 {
     Client *c;
     int b;
@@ -1494,15 +1485,14 @@ handleLeaveNotify (DisplayInfo *display_info, XfwmEventCrossing *event)
     TRACE ("entering");
 
     need_redraw = FALSE;
-    c = myDisplayGetClientFromWindow (display_info, event->meta.window,
-                                      SEARCH_FRAME | SEARCH_BUTTON);
+    c = myDisplayGetClientFromWindow (display_info, ev->window, SEARCH_FRAME | SEARCH_BUTTON);
     if (c)
     {
         for (b = 0; b < BUTTON_COUNT; b++)
         {
             if ((c->button_status[b] == BUTTON_STATE_PRELIGHT) || (c->button_status[b] == BUTTON_STATE_PRESSED))
             {
-                if (MYWINDOW_XWINDOW(c->buttons[b]) == event->meta.window)
+                if (MYWINDOW_XWINDOW(c->buttons[b]) == ev->window)
                 {
                     c->button_status[b] = BUTTON_STATE_NORMAL;
                     need_redraw = TRUE;
@@ -2199,7 +2189,7 @@ handleXSyncAlarmNotify (DisplayInfo *display_info, XSyncAlarmNotifyEvent * ev)
 #endif /* HAVE_XSYNC */
 
 static eventFilterStatus
-handleEvent (DisplayInfo *display_info, XfwmEvent *event)
+handleEvent (DisplayInfo *display_info, XEvent * ev)
 {
     eventFilterStatus status;
     status = EVENT_FILTER_PASS;
@@ -2207,101 +2197,81 @@ handleEvent (DisplayInfo *display_info, XfwmEvent *event)
     TRACE ("entering");
 
     /* Update the display time */
-    myDisplayUpdateCurrentTime (display_info, event);
-    sn_process_event (event->meta.xevent);
-
-    switch (event->meta.type)
+    myDisplayUpdateCurrentTime (display_info, ev);
+    sn_process_event (ev);
+    switch (ev->type)
     {
-        case XFWM_EVENT_KEY:
-            if (event->key.pressed)
-            {
-                status = handleKeyPress (display_info, &event->key);
-            }
-            else
-            {
-                status = handleKeyRelease (display_info, &event->key);
-            }
+        case MotionNotify:
+            status = handleMotionNotify (display_info, (XMotionEvent *) ev);
             break;
-        case XFWM_EVENT_BUTTON:
-            if (event->button.pressed)
-            {
-                status = handleButtonPress (display_info, &event->button);
-            }
-            else
-            {
-                status = handleButtonRelease (display_info, &event->button);
-            }
+        case KeyPress:
+            status = handleKeyPress (display_info, (XKeyEvent *) ev);
             break;
-        case XFWM_EVENT_MOTION:
-            status = handleMotionNotify (display_info, &event->motion);
+        case KeyRelease:
+            status = handleKeyRelease (display_info, (XKeyEvent *) ev);
             break;
-        case XFWM_EVENT_CROSSING:
-            if (event->crossing.enter)
-            {
-                status = handleEnterNotify (display_info, &event->crossing);
-            }
-            else
-            {
-                status = handleLeaveNotify (display_info, &event->crossing);
-            }
+        case ButtonPress:
+            status = handleButtonPress (display_info, (XButtonEvent *) ev);
             break;
-        case XFWM_EVENT_XEVENT:
-            switch (event->meta.xevent->type)
+        case ButtonRelease:
+            status = handleButtonRelease (display_info, (XButtonEvent *) ev);
+            break;
+        case DestroyNotify:
+            status = handleDestroyNotify (display_info, (XDestroyWindowEvent *) ev);
+            break;
+        case UnmapNotify:
+            status = handleUnmapNotify (display_info, (XUnmapEvent *) ev);
+            break;
+        case MapRequest:
+            status = handleMapRequest (display_info, (XMapRequestEvent *) ev);
+            break;
+        case MapNotify:
+            status = handleMapNotify (display_info, (XMapEvent *) ev);
+            break;
+        case ConfigureNotify:
+            status = handleConfigureNotify (display_info, (XConfigureEvent *) ev);
+            break;
+        case ConfigureRequest:
+            status = handleConfigureRequest (display_info, (XConfigureRequestEvent *) ev);
+            break;
+        case EnterNotify:
+            status = handleEnterNotify (display_info, (XCrossingEvent *) ev);
+            break;
+        case LeaveNotify:
+            status = handleLeaveNotify (display_info, (XCrossingEvent *) ev);
+            break;
+        case FocusIn:
+            status = handleFocusIn (display_info, (XFocusChangeEvent *) ev);
+            break;
+        case FocusOut:
+            status = handleFocusOut (display_info, (XFocusChangeEvent *) ev);
+            break;
+        case PropertyNotify:
+            status = handlePropertyNotify (display_info, (XPropertyEvent *) ev);
+            break;
+        case ClientMessage:
+            status = handleClientMessage (display_info, (XClientMessageEvent *) ev);
+            break;
+        case SelectionClear:
+            status = handleSelectionClear (display_info, (XSelectionClearEvent *) ev);
+            break;
+        case ColormapNotify:
+            handleColormapNotify (display_info, (XColormapEvent *) ev);
+            break;
+        case ReparentNotify:
+            status = handleReparentNotify (display_info, (XReparentEvent *) ev);
+            break;
+        default:
+            if ((display_info->have_shape) && (ev->type == display_info->shape_event_base))
             {
-                case DestroyNotify:
-                    status = handleDestroyNotify (display_info, (XDestroyWindowEvent *) event->meta.xevent);
-                    break;
-                case UnmapNotify:
-                    status = handleUnmapNotify (display_info, (XUnmapEvent *) event->meta.xevent);
-                    break;
-                case MapRequest:
-                    status = handleMapRequest (display_info, (XMapRequestEvent *) event->meta.xevent);
-                    break;
-                case MapNotify:
-                    status = handleMapNotify (display_info, (XMapEvent *) event->meta.xevent);
-                    break;
-                case ConfigureNotify:
-                    status = handleConfigureNotify (display_info, (XConfigureEvent *) event->meta.xevent);
-                    break;
-                case ConfigureRequest:
-                    status = handleConfigureRequest (display_info, (XConfigureRequestEvent *) event->meta.xevent);
-                    break;
-                case FocusIn:
-                    status = handleFocusIn (display_info, (XFocusChangeEvent *) event->meta.xevent);
-                    break;
-                case FocusOut:
-                    status = handleFocusOut (display_info, (XFocusChangeEvent *) event->meta.xevent);
-                    break;
-                case PropertyNotify:
-                    status = handlePropertyNotify (display_info, (XPropertyEvent *) event->meta.xevent);
-                    break;
-                case ClientMessage:
-                    status = handleClientMessage (display_info, (XClientMessageEvent *) event->meta.xevent);
-                    break;
-                case SelectionClear:
-                    status = handleSelectionClear (display_info, (XSelectionClearEvent *) event->meta.xevent);
-                    break;
-                case ColormapNotify:
-                    handleColormapNotify (display_info, (XColormapEvent *) event->meta.xevent);
-                    break;
-                case ReparentNotify:
-                    status = handleReparentNotify (display_info, (XReparentEvent *) event->meta.xevent);
-                    break;
-                default:
-                    if ((display_info->have_shape) &&
-                            (event->meta.xevent->type == display_info->shape_event_base))
-                    {
-                        status = handleShape (display_info, (XShapeEvent *) event->meta.xevent);
-                    }
+                status = handleShape (display_info, (XShapeEvent *) ev);
+            }
 #ifdef HAVE_XSYNC
-                    if ((display_info->have_xsync) &&
-                            (event->meta.xevent->type == (display_info->xsync_event_base + XSyncAlarmNotify)))
-                    {
-                        status = handleXSyncAlarmNotify (display_info, (XSyncAlarmNotifyEvent *) event->meta.xevent);
-                    }
-#endif /* HAVE_XSYNC */
-                    break;
+            if ((display_info->have_xsync) && (ev->type == (display_info->xsync_event_base + XSyncAlarmNotify)))
+            {
+                status = handleXSyncAlarmNotify (display_info, (XSyncAlarmNotifyEvent *) ev);
             }
+#endif /* HAVE_XSYNC */
             break;
     }
     if (!gdk_events_pending () && !XPending (display_info->dpy))
@@ -2322,13 +2292,13 @@ handleEvent (DisplayInfo *display_info, XfwmEvent *event)
         }
     }
 
-    compositorHandleEvent (display_info, event->meta.xevent);
+    compositorHandleEvent (display_info, ev);
 
     return status;
 }
 
 eventFilterStatus
-xfwm4_event_filter (XfwmEvent *event, gpointer data)
+xfwm4_event_filter (XEvent * xevent, gpointer data)
 {
     eventFilterStatus status;
     DisplayInfo *display_info;
@@ -2336,8 +2306,9 @@ xfwm4_event_filter (XfwmEvent *event, gpointer data)
     display_info = (DisplayInfo *) data;
 
     TRACE ("entering");
-    status = handleEvent (display_info, event);
+    status = handleEvent (display_info, xevent);
     TRACE ("leaving");
+
     return EVENT_FILTER_STOP | status;
 }
 

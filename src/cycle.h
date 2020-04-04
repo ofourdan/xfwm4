@@ -35,7 +35,7 @@
 #define INC_CYCLE_H
 
 void                     clientCycle                            (Client *,
-                                                                 XfwmEventKey *);
+                                                                 XKeyEvent *);
 gboolean                 clientSwitchWindow                     (void);
 gboolean                 clientSwitchApp                        (void);
 #endif /* INC_CYCLE_H */

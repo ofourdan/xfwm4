@@ -488,7 +488,7 @@ void                     clientScreenResize                     (ScreenInfo *,
                                                                  gboolean);
 void                     clientButtonPress                      (Client *,
                                                                  Window,
-                                                                 XfwmEventButton *);
+                                                                 XButtonEvent *);
 xfwmPixmap *             clientGetButtonPixmap                  (Client *,
                                                                  int,
                                                                  int);

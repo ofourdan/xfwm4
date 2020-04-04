@@ -785,70 +785,50 @@ myDisplayGetDefaultScreen (DisplayInfo *display)
 }
 
 guint32
-myDisplayUpdateCurrentTime (DisplayInfo *display, XfwmEvent *event)
+myDisplayUpdateCurrentTime (DisplayInfo *display, XEvent *ev)
 {
     guint32 timestamp;
-    XEvent *xevent;
 
     g_return_val_if_fail (display != NULL, (guint32) CurrentTime);
 
     timestamp = (guint32) CurrentTime;
-    switch (event->meta.type)
+    switch (ev->type)
     {
-        case XFWM_EVENT_KEY:
-            timestamp = (guint32) event->key.time;
+        case KeyPress:
+        case KeyRelease:
+            timestamp = (guint32) ev->xkey.time;
             break;
-        case XFWM_EVENT_BUTTON:
-            timestamp = (guint32) event->button.time;
+        case ButtonPress:
+        case ButtonRelease:
+            timestamp = (guint32) ev->xbutton.time;
             break;
-        case XFWM_EVENT_MOTION:
-            timestamp = (guint32) event->motion.time;
+        case MotionNotify:
+            timestamp = (guint32) ev->xmotion.time;
             break;
-        case XFWM_EVENT_CROSSING:
-            timestamp = (guint32) event->crossing.time;
+        case EnterNotify:
+        case LeaveNotify:
+            timestamp = (guint32) ev->xcrossing.time;
             break;
-        case XFWM_EVENT_XEVENT:
-            xevent = event->meta.xevent;
-
-            switch (xevent->type)
-            {
-                case KeyPress:
-                case KeyRelease:
-                    timestamp = (guint32) xevent->xkey.time;
-                    break;
-                case ButtonPress:
-                case ButtonRelease:
-                    timestamp = (guint32) xevent->xbutton.time;
-                    break;
-                case MotionNotify:
-                    timestamp = (guint32) xevent->xmotion.time;
-                    break;
-                case EnterNotify:
-                case LeaveNotify:
-                    timestamp = (guint32) xevent->xcrossing.time;
-                    break;
-                case PropertyNotify:
-                    timestamp = (guint32) xevent->xproperty.time;
-                    break;
-                case SelectionClear:
-                    timestamp = (guint32) xevent->xselectionclear.time;
-                    break;
-                case SelectionRequest:
-                    timestamp = (guint32) xevent->xselectionrequest.time;
-                    break;
-                case SelectionNotify:
-                    timestamp = (guint32) xevent->xselection.time;
-                    break;
-                default:
+        case PropertyNotify:
+            timestamp = (guint32) ev->xproperty.time;
+            break;
+        case SelectionClear:
+            timestamp = (guint32) ev->xselectionclear.time;
+            break;
+        case SelectionRequest:
+            timestamp = (guint32) ev->xselectionrequest.time;
+            break;
+        case SelectionNotify:
+            timestamp = (guint32) ev->xselection.time;
+            break;
+        default:
 #ifdef HAVE_XSYNC
-                    if ((display->have_xsync) &&
-                        (xevent->type == display->xsync_event_base + XSyncAlarmNotify))
-                    {
-                        timestamp = ((XSyncAlarmNotifyEvent*) xevent)->time;
-                    }
-#endif /* HAVE_XSYNC */
-                    break;
+            if ((display->have_xsync) && (ev->type == display->xsync_event_base + XSyncAlarmNotify))
+            {
+                timestamp = ((XSyncAlarmNotifyEvent*) ev)->time;
             }
+#endif /* HAVE_XSYNC */
+            break;
     }
 
     if ((timestamp != (guint32) CurrentTime))

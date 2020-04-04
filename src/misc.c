@@ -48,8 +48,8 @@ guint
 getMouseXY (ScreenInfo *screen_info, gint *x2, gint *y2)
 {
     Window w1, w2;
-    guint mask;
-    gint x1, y1;
+    unsigned int mask;
+    int x1, y1;
 
     TRACE ("window (0x%lx)", w);
 

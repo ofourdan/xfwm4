@@ -28,15 +28,13 @@
 #include "config.h"
 #endif
 
-#include "device.h"
-
 #include <X11/keysym.h>
 
 typedef struct _MyKey MyKey;
 struct _MyKey
 {
     KeyCode keycode;
-    guint modifier;
+    int modifier;
     gchar *internal_name;
 };
 
@@ -52,22 +50,18 @@ gboolean                 getModifierMap                         (const char *,
 void                     parseKeyString                         (Display *,
                                                                  MyKey *,
                                                                  const char *);
-gboolean                 grabKey                                (XfwmDevices *,
-                                                                 Display *,
+gboolean                 grabKey                                (Display *,
                                                                  MyKey *,
                                                                  Window);
-void                     ungrabKeys                             (XfwmDevices *,
-                                                                 Display *,
+void                     ungrabKeys                             (Display *,
                                                                  Window);
-gboolean                 grabButton                             (XfwmDevices *,
-                                                                 Display *,
-                                                                 guint,
-                                                                 guint,
+gboolean                 grabButton                             (Display *,
+                                                                 int,
+                                                                 int,
                                                                  Window);
-void                     ungrabButton                           (XfwmDevices *,
-                                                                 Display *,
-                                                                 guint,
-                                                                 guint,
+void                     ungrabButton                           (Display *,
+                                                                 int,
+                                                                 int,
                                                                  Window);
 void                     initModifiers                          (Display *);
 

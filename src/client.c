@@ -331,8 +331,7 @@ clientGrabButtons (Client *c)
     screen_info = c->screen_info;
     if (screen_info->params->easy_click)
     {
-        grabButton (c->screen_info->display_info->devices, clientGetXDisplay (c),
-                    AnyButton, screen_info->params->easy_click, c->window);
+        grabButton(clientGetXDisplay (c), AnyButton, screen_info->params->easy_click, c->window);
     }
 }
 
@@ -341,8 +340,9 @@ clientUngrabButtons (Client *c)
 {
     g_return_if_fail (c != NULL);
     TRACE ("client \"%s\" (0x%lx)", c->name, c->window);
-    xfwm_device_ungrab_button (c->screen_info->display_info->devices, clientGetXDisplay (c),
-                               AnyButton, AnyModifier, c->window);
+    myDisplayErrorTrapPush (c->screen_info->display_info);
+    XUngrabButton (clientGetXDisplay (c), AnyButton, AnyModifier, c->window);
+    myDisplayErrorTrapPopIgnored (c->screen_info->display_info);
 }
 
 static gboolean
@@ -3782,7 +3782,7 @@ clientUpdateAllCursor (ScreenInfo *screen_info)
 }
 
 static eventFilterStatus
-clientButtonPressEventFilter (XfwmEvent *event, gpointer data)
+clientButtonPressEventFilter (XEvent * xevent, gpointer data)
 {
     ScreenInfo *screen_info;
     DisplayInfo *display_info;
@@ -3800,49 +3800,46 @@ clientButtonPressEventFilter (XfwmEvent *event, gpointer data)
     display_info = screen_info->display_info;
 
     /* Update the display time */
-    myDisplayUpdateCurrentTime (display_info, event);
+    myDisplayUpdateCurrentTime (display_info, xevent);
 
     status = EVENT_FILTER_STOP;
     pressed = TRUE;
 
-    switch (event->meta.type)
+    switch (xevent->type)
     {
-        case XFWM_EVENT_BUTTON:
-            if (!event->button.pressed)
-            {
-                pressed = FALSE;
-            }
-            break;
-        case XFWM_EVENT_CROSSING:
-            if ((event->crossing.mode == NotifyGrab) ||
-                (event->crossing.mode == NotifyUngrab) ||
-                (event->meta.window != MYWINDOW_XWINDOW (c->buttons[b])))
+        case EnterNotify:
+        case LeaveNotify:
+            if ((xevent->xcrossing.mode == NotifyGrab) ||
+                (xevent->xcrossing.mode == NotifyUngrab) ||
+                (xevent->xcrossing.window != MYWINDOW_XWINDOW (c->buttons[b])))
             {
                 break;
             }
-            if (event->crossing.enter)
+            if (xevent->type == EnterNotify)
             {
                 c->button_status[b] = BUTTON_STATE_PRESSED;
-                frameQueueDraw (c, FALSE);
             }
             else
             {
                 c->button_status[b] = BUTTON_STATE_NORMAL;
-                frameQueueDraw (c, FALSE);
             }
+            frameQueueDraw (c, FALSE);
             break;
-        case XFWM_EVENT_XEVENT:
-            if ((event->meta.xevent->type == UnmapNotify) && (event->meta.window == c->window))
+        case ButtonRelease:
+            pressed = FALSE;
+            break;
+        case UnmapNotify:
+            if (xevent->xunmap.window == c->window)
             {
                 pressed = FALSE;
                 c->button_status[b] = BUTTON_STATE_NORMAL;
             }
-            else
-            {
-                status = EVENT_FILTER_CONTINUE;
-            }
+            break;
+        case KeyPress:
+        case KeyRelease:
             break;
         default:
+            status = EVENT_FILTER_CONTINUE;
             break;
     }
 
@@ -3856,13 +3853,12 @@ clientButtonPressEventFilter (XfwmEvent *event, gpointer data)
 }
 
 void
-clientButtonPress (Client *c, Window w, XfwmEventButton *event)
+clientButtonPress (Client *c, Window w, XButtonEvent * bev)
 {
     ScreenInfo *screen_info;
     DisplayInfo *display_info;
     ButtonPressData passdata;
-    gint b;
-    gboolean g1;
+    int b, g1;
 
     g_return_if_fail (c != NULL);
     TRACE ("client \"%s\" (0x%lx)", c->name, c->window);
@@ -3879,14 +3875,14 @@ clientButtonPress (Client *c, Window w, XfwmEventButton *event)
     display_info = screen_info->display_info;
 
     myDisplayErrorTrapPush (display_info);
-    g1 = xfwm_device_grab (display_info->devices, &display_info->devices->pointer,
-                           display_info->dpy, w, FALSE,
-                           ButtonReleaseMask | EnterWindowMask | LeaveWindowMask,
-                           GrabModeAsync, screen_info->xroot, None,
-                           myDisplayGetCurrentTime (display_info));
+    g1 = XGrabPointer (display_info->dpy, w, FALSE,
+                       ButtonReleaseMask | EnterWindowMask | LeaveWindowMask,
+                       GrabModeAsync, GrabModeAsync,
+                       screen_info->xroot, None,
+                       myDisplayGetCurrentTime (display_info));
     myDisplayErrorTrapPopIgnored (display_info);
 
-    if (!g1)
+    if (g1 != GrabSuccess)
     {
         TRACE ("grab failed in clientButtonPress");
         myDisplayBeep (display_info);
@@ -3906,8 +3902,7 @@ clientButtonPress (Client *c, Window w, XfwmEventButton *event)
     TRACE ("leaving button press loop");
 
     myDisplayErrorTrapPush (display_info);
-    xfwm_device_ungrab (display_info->devices, &display_info->devices->pointer,
-                        display_info->dpy, myDisplayGetCurrentTime (display_info));
+    XUngrabPointer (display_info->dpy, myDisplayGetCurrentTime (display_info));
     myDisplayErrorTrapPopIgnored (display_info);
 
     if (c->button_status[b] == BUTTON_STATE_PRESSED)
@@ -3939,15 +3934,15 @@ clientButtonPress (Client *c, Window w, XfwmEventButton *event)
             case MAXIMIZE_BUTTON:
                 if (CLIENT_CAN_MAXIMIZE_WINDOW (c))
                 {
-                    if (event->button == Button1)
+                    if (bev->button == Button1)
                     {
                         clientToggleMaximized (c, CLIENT_FLAG_MAXIMIZED, TRUE);
                     }
-                    else if (event->button == Button2)
+                    else if (bev->button == Button2)
                     {
                         clientToggleMaximized (c, CLIENT_FLAG_MAXIMIZED_VERT, TRUE);
                     }
-                    else if (event->button == Button3)
+                    else if (bev->button == Button3)
                     {
                         clientToggleMaximized (c, CLIENT_FLAG_MAXIMIZED_HORIZ, TRUE);
                     }
