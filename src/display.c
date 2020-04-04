@@ -234,8 +234,6 @@ myDisplayInit (GdkDisplay *gdisplay)
         g_warning ("Some internal atoms were not properly created.");
     }
 
-    display->devices = xfwm_devices_new (gdisplay);
-
     /* Test XShape extension support */
     major = 0;
     minor = 0;
@@ -396,9 +394,6 @@ myDisplayClose (DisplayInfo *display)
 
     g_slist_free (display->screens);
     display->screens = NULL;
-
-    g_free (display->devices);
-    display->devices = NULL;
 
     return display;
 }

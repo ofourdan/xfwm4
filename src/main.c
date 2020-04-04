@@ -681,7 +681,7 @@ initialize (gint compositor_mode, gboolean replace_wm)
     {
         return -1;
     }
-    display_info->xfilter = eventFilterInit (display_info->devices, (gpointer) display_info);
+    display_info->xfilter = eventFilterInit ((gpointer) display_info);
     eventFilterPush (display_info->xfilter, xfwm4_event_filter, (gpointer) display_info);
     initPerDisplayCallbacks (display_info);
 
@@ -778,10 +778,7 @@ main (int argc, char **argv)
      */
     gdk_set_allowed_backends ("x11");
 
-#ifndef HAVE_XI2
-    /* Disable XI2 in GDK */
     gdk_disable_multidevice ();
-#endif
 
     context = g_option_context_new (_("[ARGUMENTS...]"));
     g_option_context_add_main_entries (context, option_entries, GETTEXT_PACKAGE);

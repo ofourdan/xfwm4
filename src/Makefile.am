@@ -7,8 +7,6 @@ xfwm4_SOURCES =								\
 	compositor.h							\
 	cycle.c								\
 	cycle.h								\
-	device.c							\
-	device.h							\
 	display.c							\
 	display.h							\
 	event_filter.c							\

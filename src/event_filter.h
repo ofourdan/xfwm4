@@ -31,8 +31,6 @@
 #include <gdk/gdk.h>
 #include <X11/Xlib.h>
 
-#include "device.h"
-
 /* this formatting is needed by glib-mkenums */
 typedef enum {
     EVENT_FILTER_STOP     = 0x0,
@@ -55,19 +53,16 @@ eventFilterStack;
 typedef struct eventFilterSetup
 {
     eventFilterStack *filterstack;
-    XfwmDevices *devices;
 }
 eventFilterSetup;
 
 GdkWindow               *eventFilterAddWin                      (GdkScreen *,
-                                                                 XfwmDevices *,
                                                                  long);
 eventFilterStack        *eventFilterPush                        (eventFilterSetup *,
                                                                  XfwmFilter,
                                                                  gpointer );
 eventFilterStack        *eventFilterPop                         (eventFilterSetup *);
-eventFilterSetup        *eventFilterInit                        (XfwmDevices *,
-                                                                 gpointer);
+eventFilterSetup        *eventFilterInit                        (gpointer);
 void                     eventFilterClose                       (eventFilterSetup *);
 
 #endif /* INC_EVENT_FILTER_H */
